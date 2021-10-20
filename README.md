@@ -300,6 +300,87 @@
 * ![](img/2a125869.png)
 * ![](img/e770e98c.png)
 
+---
+
+## Step
+
+1. 기본 개념
+   * Batch job을 구성하는 독립적인 하나의 단계로서 실제 배치 처리를 정의하고 컨트롤하는 데 필요한 모든 정보를 가지고 있는 도메인 객체
+   * 단순한 단일 태스크 뿐 아니라 입력과 처리 그리고 출력과 관련된 복잡한 비즈니스 로직을 포함하는 모든 설정들을 담고 있다.
+   * 배치작업을 어떻게 구성하고 실행할 것인지 Job 의 세부 작업을 Task 기반으로 설정하고 명세해 놓은 객체
+   * 모든 Job은 하나 이상의 step으로 구성됨
+
+
+2. 기본 구현체
+   * TaskletStep
+     * 가장 기본이 되는 클래스로서 Tasklet 타입의 구현체들을 제어한다
+   * PartitionStep
+     * 멀티 스레드 방식으로 Step 을 여러 개로 분리해서 실행한다
+   * JobStep
+     * Step 내에서 Job 을 실행하도록 한다
+   * FlowStep
+     * Step 내에서 Flow 를 실행하도록 한다
+
+
+* Step class 구조
+  * ![](img/f2d157db.png) 
+  * ![](img/f0704241.png)
+
+* ### API 설정에 따른 각 Step 생성
+  * ![](img/48669e7a.png)
+
+## StepExecution
+
+1. 기본 개념
+   * Step 에 대한 한번의 시도를 의미하는 객체로서 Step 실행 중에 발생한 정보들을 저장하고 있는 객체
+     * 시작시간, 종료시간 ,상태(시작됨,완료,실패), commit count, rollback count 등의 속성을 가짐
+   * Step 이 매번 시도될 때마다 생성되며 각 Step 별로 생성된다
+   * `Job 이 재시작 하더라도 이미 성공적으로 완료된 Step 은 재 실행되지 않고 실패한 Step 만 실행된다`
+   * `이전 단계 Step이 실패해서 현재 Step을 실행하지 않았다면 StepExecution을 생성하지 않는다. Step이 실제로 시작됐을 때만 StepExecution을 생성한다`
+   * JobExecution 과의 관계
+     * Step의 StepExecution 이 모두 정상적으로 완료 되어야 JobExecution이 정상적으로 완료된다.
+     * Step의 StepExecution 중 하나라도 실패하면 JobExecution 은 실패한다
+2. BATCH_STEP_EXECUTION 테이블과 매핑
+   * JobExecution 와 StepExecution 는 1:M 의 관계
+   * 하나의 Job 에 여러 개의 Step 으로 구성했을 경우 각 StepExecution 은 하나의 JobExecution 을 부모로 가진다
+
+
+* ![](img/93c15f85.png)
+
+* StepExecution class
+  * ![](img/f9d60b69.png) 
+
+## StepContribution
+
+1. 기본 개념
+   * 청크 프로세스의 변경 사항을 버퍼링 한 후 StepExecution 상태를 업데이트하는 도메인 객체
+   * 청크 커밋 직전에 StepExecution 의 apply 메서드를 호출하여 상태를 업데이트 함
+   * ExitStatus 의 기본 종료코드 외 사용자 정의 종료코드를 생성해서 적용 할 수 있음
+
+2. 구조
+   * ![](img/d1388956.png)
+   
+* StepContribution 흐름
+  *  ![](img/1ee0f972.png)
+
+## ExecutionContext
+
+1. 기본 개념
+   * 프레임워크에서 유지 및 관리하는 키/값으로 된 컬렉션으로 StepExecution 또는 JobExecution 객체의 상태(state)를 저장하는 공유 객체
+   * DB 에 직렬화 한 값으로 저장됨 - { “key” : “value”}
+   * 공유 범위
+     * Step 범위 – 각 Step 의 StepExecution 에 저장되며 Step 간 서로 공유 안됨
+     * Job 범위 – 각 Job의 JobExecution 에 저장되며 Job 간 서로 공유 안되며 해당 Job의 Step 간 서로 공유됨
+   * Job 재 시작시 이미 처리한 Row 데이터는 건너뛰고 이후로 수행하도록 할 때 상태 정보를 활용한다
+
+2. 구조
+
+* ![](img/6b05106c.png)
+
+* ![](img/dcc480ae.png)
+
+* ![](img/0766df42.png)
+
 
 
 # 4. 스프링 배치 실행
