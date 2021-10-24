@@ -455,6 +455,230 @@ protected JobRepository createJobRepository() throws Exception {
 
 # 4. 스프링 배치 실행
 
+## 배치 초기화 설정 (properties, yml)
+1. JobLauncherApplicationRunner
+   * Spring Batch 작업을 시작하는 ApplicationRunner 로서 BatchAutoConfiguration 에서 생성됨
+   * 스프링 부트에서 제공하는 ApplicationRunner 의 구현체로 어플리케이션이 정상적으로 구동되자 마다 실행됨
+   * 기본적으로 빈으로 등록된 모든 job 을 실행시킨다.
+2. BatchProperties
+   * Spring Batch 의 환경 설정 클래스
+   * Job 이름, 스키마 초기화 설정, 테이블 Prefix 등의 값을 설정할 수 있다.
+   * application.properties or application.yml 파일에 설정함
+     * ```yml
+       batch:
+         job:
+         names: ${job.name:NONE}
+         initialize-schema: NEVER
+         tablePrefix: SYSTEM
+       ```
+     
+3. Job 실행 옵션
+   * 지정한 Batch Job만 실행하도록 할 수 있음
+   * spring.batch.job.names: ${job.name:NONE}
+   * 어플리케이션 실행시 Program arguments 로 job 이름 입력한다
+     * --job.name=helloJob
+     * --job.name=helloJob,simpleJob (하나 이상의 job 을 실행 할 경우 쉼표로 구분해서 입력함)
+
+---
+
+## JobBuilderFactory / JobBuilder
+
+1. 스프링 배치는 Job 과 Step 을 쉽게 생성 및 설정할 수 있도록 util 성격의 빌더 클래스들을 제공함
+
+2. JobBuilderFactory
+   * JobBuilder 를 생성하는 팩토리 클래스로서 get(String name) 메서드 제공
+   * jobBuilderFactory.get(“jobName")
+     * “jobName” 은 스프링 배치가 Job 을 실행시킬 때 참조하는 Job 의 이름
+
+3. JobBuilder
+   * Job 을 구성하는 설정 조건에 따라 두 개의 하위 빌더 클래스를 생성하고 실제 Job 생성을 위임한다
+   * SimpleJobBuilder
+     * SimpleJob 을 생성하는 Builder 클래스
+     * Job 실행과 관련된 여러 설정 API 를 제공한다
+   * FlowJobBuilder
+     * FlowJob 을 생성하는 Builder 클래스
+     * 내부적으로 FlowBuilder 를 반환함으로써 Flow 실행과 관련된 여러 설정 API 를 제공한다
+
+### `아키텍처`
+
+* ![](img/6789eee4.png)
+
+### `클래스 상속 구조`
+* ![](img/0f8f082e.png)
+
+## 개념 및 API 소개
+
+1. 기본개념
+   * SimpleJob 은 Step 을 실행시키는 Job 구현체로서 SimpleJobBuilder 에 의해 생성된다
+   * 여러 단계의 Step 으로 구성할 수 있으며 Step 을 순차적으로 실행시킨다
+   * 모든 Step 의 실행이 성공적으로 완료되어야 Job 이 성공적으로 완료 된다
+   * 맨 마지막에 실행한 Step 의 BatchStatus 가 Job 의 최종 BatchStatus 가 된다
+
+2. 흐름
+* ![](img/2ec6b1a7.png)
+
+
+## API 설정 - start() / next()  메서드
+
+* .start(Step) // 처음 실행할 STep 설정. 최초 한번 설정. SimpleJobBuilder가 생성되고 반환 
+* .next(Step) // 다음에 실행할 Step들을 순차적으로 연결하도록 설정 . 모든 Step이 종료되면 Job 종료 
+* 
+
+## validator() 메서드 
+1. 기본개념
+   * Job 실행에 꼭 필요한 파라미터를 검증하는 용도
+   * DefaultJobParametersValidator 구현체를 지원하며, 좀 더 복잡한 제약 조건이 있다면 인터페이스를 직접 구현할 수도 있음
+
+## preventRestart()
+
+1. 기본개념
+   * Job 의 재 시작 여부를 설정
+   * 기본 값은 true 이며 false 로 설정 시 “ 이 Job은 재 시작을 지원하지 않는다 ” 라는 의미
+   * Job 이 실패해도 재 시작이 안되며 Job을 재 시작하려고 하면 JobRestartException이 발생
+   * 재 시작과 관련 있는 기능으로 Job 을 처음 실행하는 것 과는 아무런 상관 없음
+
+2. 흐름도
+    * ![](img/3ceb69ad.png)
+
+## incrementer()
+1. 기본개념
+   * JobParameters 에서 필요한 값을 증가시켜 다음에 사용될 JobParameters 오브젝트를 리턴
+   * 기존의 JobParameter 변경없이 Job 을 여러 번 시작하고자 할때
+   * RunIdIncrementer 구현체를 지원하며 인터페이스를 직접 구현할 수 있음
+   * ![](img/3567a9a4.png)
+
+---
+
+## StepBuilderFactory / StepBuilder
+
+1. StepBuilderFactory
+   * StepBuilder 를 생성하는 팩토리 클래스로서 get(String name) 메서드 제공
+   * StepBuilderFactory.get(“stepName")
+     * “stepName” 으로 Step 을 생성
+
+2. StepBuilder
+   * Step 을 구성하는 설정 조건에 따라 다섯 개의 하위 빌더 클래스를 생성하고 실제 Step 생성을 위임한다
+   * TaskletStepBuilder
+     * TaskletStep 을 생성하는 기본 빌더 클래스
+   * SimpleStepBuilder
+     * TaskletStep 을 생성하며 내부적으로 청크기반의 작업을 처리하는 ChunkOrientedTasklet 클래스를 생성한다
+   * PartitionStepBuilder
+     * PartitionStep 을 생성하며 멀티 스레드 방식으로 Job 을 실행한다
+   * JobStepBuilder
+     * JobStep 을 생성하여 Step 안에서 Job 을 실행한다
+   * FlowStepBuilder
+     * FlowStep 을 생성하여 Step 안에서 Flow 를 실행한다
+
+---
+
+## TaskletStep
+
+1. 기본 개념
+   * 스프링 배치에서 제공하는 Step 의 구현체로서 Tasklet 을 실행시키는 도메인 객체
+   * RepeatTemplate 를 사용해서 Tasklet 의 구문을 트랜잭션 경계 내에서 반복해서 실행함
+   * Task 기반과 Chunk 기반으로 나누어서 Tasklet 을 실행함
+
+2. Task vs Chunk 기반 비교
+   * 스프링 배치에서 Step의 실행 단위는 크게 2가지로 나누어짐
+     * chunk 기반
+       * 하나의 큰 덩어리를 n개씩 나눠서 실행한다는 의미로 대량 처리를 하는 경우 효과적으로 설계 됨
+       * ItemReader, ItemProcessor, ItemWriter 를 사용하며 청크 기반 전용 Tasklet 인 ChunkOrientedTasklet 구현체가 제공된다
+   * Task 기반
+     * ItemReader 와 ItemWriter 와 같은 청크 기반의 작업 보다 단일 작업 기반으로 처리되는 것이 더 효율적인 경우
+     * 주로 Tasklet 구현체를 만들어 사용
+     * 대량 처리를 하는 경우 chunk 기반에 비해 더 복잡한 구현 필요
+
+* ![](img/8efaccbc.png)
+
+## tasklet() 메서드 
+
+1. 기본 개념
+   * Tasklet 타입의 클래스를 설정한다
+     * Tasklet
+       * Step 내에서 구성되고 실행되는 도메인 객체로서 주로 단일 태스크를 수행하기위한 것
+       * TaskletStep 에 의해 반복적으로 수행되며 반환값에 따라 계속 수행 혹은 종료한다
+       * RepeatStatus - Tasklet 의 반복 여부 상태 값
+         * RepeatStatus.FINISHED - Tasklet 종료, RepeatStatus 을 null 로 반환하면 RepeatStatus.FINISHED로 해석됨
+         * RepeatStatus.CONTINUABLE - Tasklet 반복
+         * RepeatStatus.FINISHED가 리턴되거나 실패 예외가 던져지기 전까지 TaskletStep 에 의해 while 문 안에서 반복적으로 호출됨 (무한루프 주의)
+   * 익명 클래스 혹은 구현 클래스를 만들어서 사용한다
+   * 이 메소드를 실행하게 되면 TaskletStepBuilder 가 반환되어 관련 API 를 설정할 수 있다.
+   * Step 에 오직 하나의 Tasklet 설정이 가능하며 두개 이상을 설정 했을 경우 마지막에 설정한 객체가 실행된다
+
+## startLimit() / allowStartIfComplete()
+
+### startLimit()
+1. 기본 개념
+   * Step의 실행 횟수를 조정할 수 있다
+   * Step 마다 설정할 수 있다
+   * 설정 값을 초과해서 다시 실행하려고 하면 StartLimitExceededException이 발생
+   * start-limit의 디폴트 값은 Integer.MAX_VALUE
+
+### allowStartIfComplete()
+1. 기본 개념
+   * 재시작 가능한 job 에서 Step 의 이전 성공 여부와 상관없이 항상 step 을 실행하기 위한 설정
+   * `실행 마다 유효성을 검증하는 Step이나 사전 작업이 꼭 필요한 Step 등`
+   * 기본적으로 COMPLETED 상태를 가진 Step 은 Job 재 시작 시 실행하지 않고 스킵한다
+   * allow-start-if-complete가 “true”로 설정된 step은 항상 실행한다
+
+2. 흐름도
+    * ![](img/6edc3237.png)
+
+---
+
+## JobStep
+1. 기본 개념
+   * Job 에 속하는 Step 중 외부의 Job 을 포함하고 있는 Step
+   * 외부의 Job 이 실패하면 해당 Step 이 실패하므로 결국 최종 기본 Job 도 실패한다
+   * 모든 메타데이터는 기본 Job 과 외부 Job 별로 각각 저장된다.
+   * 커다란 시스템을 작은 모듈로 쪼개고 job의 흐름를 관리하고자 할 때 사용할 수 있다
+
+
+2. API 소개
+    * ![](img/01a98d11.png)
+
+
+## FlowJob
+
+1. 기본개념
+   * Step 을 순차적으로만 구성하는 것이 아닌 특정한 상태에 따라 흐름을 전환하도록 구성할 수 있으며 FlowJobBuilder 에 의해 생성된다
+     * Step 이 실패 하더라도 Job 은 실패로 끝나지 않도록 해야 하는 경우
+     * Step 이 성공 했을 때 다음에 실행해야 할 Step 을 구분해서 실행 해야 하는경우
+     * 특정 Step은 전혀 실행되지 않게 구성 해야 하는 경우
+   * Flow 와 Job 의 흐름을 구성하는데만 관여하고 실제 비즈니스 로직은 Step 에서 이루어진다
+   * 내부적으로 SimpleFlow 객체를 포함하고 있으며 Job 실행 시 호출한다
+
+2. SimpleJob vs FlowJob
+  * ![](img/a2fdf5ce.png)
+
+  * ![](img/46ee7a0f.png)
+
+## 배치 상태 유형 - BatchStatus / ExitStatus / FlowExecutionStatus
+
+* ### BatchStatus
+  * JobExecution 과 StepExecution의 속성으로 Job 과 Step 의 종료 후 최종 결과 상태가 무엇인지 정의
+  * SimpleJob
+    * 마지막 Step 의 BatchStatus 값을 Job 의 최종 BatchStatus 값으로 반영
+    * Step 이 실패할 경우 해당 Step 이 마지막 Step 이 된다
+  * FlowJob
+    * Flow 내 Step 의 ExitStatus 값을 FlowExecutionStatus 값으로 저장
+    * 마지막 Flow 의 FlowExecutionStatus 값을 Job 의 최종 BatchStatus 값으로 반영
+
+* COMPLETED, STARTING, STARTED, STOPPING, STOPPED, FAILED, ABANDONED, UNKNOWN
+* ABANDONED 는 처리를 완료했지만 성공하지 못한 단계와 재시작시 건너 뛰어야하는 단계
+
+* ### ExitStatus
+  * JobExecution 과 StepExecution의 속성으로 Job 과 Step 의 실행 후 어떤 상태로 종료되었는지 정의
+  * 기본적으로 ExitStatus 는 BatchStatus 와 동일한 값으로 설정된다
+  * SimpleJob
+    * 마지막 Step 의 ExitStatus 값을 Job 의 최종 ExitStatus 값으로 반영
+  * FlowJob
+    * Flow 내 Step 의 ExitStatus 값을 FlowExecutionStatus 값으로 저장
+    * 마지막 Flow 의 FlowExecutionStatus 값을 Job 의 최종 ExitStatus 값으로 반영
+  * UNKNOWN, EXECUTING, COMPLETED, NOOP, FAILED, STOPPED
+  * exitCode 속성으로 참조
+
+
 # 5. 스프링 배치 청크 프로세스 (1)
 
 # 6. 스프링 배치 청크 프로세스 (2)
