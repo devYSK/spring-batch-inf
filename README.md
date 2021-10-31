@@ -246,7 +246,7 @@
      * 예를 들어 하루에 한 번 씩 배치 Job이 실행된다면 매일 실행되는 각각의 Job 을 JobInstance 로 표현합니다.
    * JobInstance 생성 및 실행
      * 처음 시작하는 Job + JobParameter 일 경우 새로운 JobInstance 생성
-     * 이전과 동일한 Job + JobParameter 으로 실행 할 경우 이미 존재하는 JobInstance 리턴 -> 재사
+     * 이전과 동일한 Job + JobParameter 으로 실행 할 경우 이미 존재하는 JobInstance 리턴 -> 재사용
        * 내부적으로 JobName + jobKey (jobParametes 의 해시값) 를 가지고 JobInstance 객체를 얻음
    * Job 과는 1:M 관계
 
@@ -546,7 +546,7 @@ protected JobRepository createJobRepository() throws Exception {
    * 기존의 JobParameter 변경없이 Job 을 여러 번 시작하고자 할때
    * RunIdIncrementer 구현체를 지원하며 인터페이스를 직접 구현할 수 있음
    * ![](img/3567a9a4.png)
-
+   * 보통 RunIdIncrementer 클래스 사용 
 ---
 
 ## StepBuilderFactory / StepBuilder
@@ -680,7 +680,14 @@ protected JobRepository createJobRepository() throws Exception {
 
 
 # 5. 스프링 배치 청크 프로세스 (1)
+* 기본 개념
+  * ChunkOrientedTasklet 은 스프링 배치에서 제공하는 Tasklet 의 구현체로서 Chunk 지향 프로세싱를 담당하는 도메인 객체
+  * ItemReader, ItemWriter, ItemProcessor 를 사용해 Chunk 기반의 데이터 입출력 처리를 담당한다
+  * TaskletStep 에 의해서 반복적으로 실행되며 ChunkOrientedTasklet 이 실행 될 때마다 매번 새로운 트랜잭션이 생성되어 처리가 이루어진다
+  * exception이 발생할 경우, 해당 Chunk는 롤백 되며 이전에 커밋한 Chunk는 완료된 상태가 유지된다
+  * 내부적으로 ItemReader 를 핸들링 하는 ChunkProvider 와 ItemProcessor, ItemWriter 를 핸들링하는 ChunkProcessor 타입의 구현체를 가진다
 
+  
 # 6. 스프링 배치 청크 프로세스 (2)
 
 # 7. 스프링 배치 반복 및 오류 제어

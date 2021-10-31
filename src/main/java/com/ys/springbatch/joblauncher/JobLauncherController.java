@@ -37,6 +37,7 @@ public class JobLauncherController {
                 .addDate("date", new Date())
                 .toJobParameters();
 
+        // 캐스팅을해서 사용해야 한다. 수동으로 Job 실행.
         SimpleJobLauncher jobLauncher = (SimpleJobLauncher)basicBatchConfigurer.getJobLauncher();
         jobLauncher.setTaskExecutor(new SimpleAsyncTaskExecutor());
 
